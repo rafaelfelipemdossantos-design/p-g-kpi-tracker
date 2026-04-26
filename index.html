@@ -14,17 +14,19 @@
         import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
         import { getFirestore, collection, doc, onSnapshot, updateDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
-        // CONFIGURAÇÃO DO FIREBASE
-        // No GitHub: Substitua os valores abaixo pelos dados do seu Console Firebase
+        // =========================================================
+        // CONFIGURAÇÃO DO FIREBASE (CRÍTICO)
+        // Substitua os valores abaixo pelos dados do seu Console Firebase
+        // =========================================================
         const firebaseConfig = typeof __firebase_config !== 'undefined' 
             ? JSON.parse(__firebase_config) 
             : {
-                apiKey: "SUA_API_KEY_AQUI", 
-                authDomain: "SEU-PROJETO.firebaseapp.com",
-                projectId: "SEU-PROJETO",
-                storageBucket: "SEU-PROJETO.appspot.com",
-                messagingSenderId: "000000000",
-                appId: "1:000000000:web:abcdef"
+                apiKey: "COLE_AQUI_SUA_API_KEY_DO_CONSOLE_FIREBASE", // Você precisa encontrar este no Console do Firebase
+                authDomain: "kpis2026.firebaseapp.com",
+                projectId: "kpis2026",
+                storageBucket: "kpis2026.appspot.com",
+                messagingSenderId: "882799580744",
+                appId: "COLE_AQUI_SEU_APP_ID_DO_CONSOLE_FIREBASE" // Você precisa encontrar este no Console do Firebase
             };
 
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'p-g-kpi-tracker';
@@ -34,7 +36,7 @@
             app = initializeApp(firebaseConfig);
             auth = getAuth(app);
             db = getFirestore(app);
-        } catch (e) { console.error("Erro Firebase:", e); }
+        } catch (e) { console.error("Erro na inicialização do Firebase:", e); }
 
         // Estado Global
         let state = {
@@ -57,14 +59,14 @@
             const root = document.getElementById('root');
             if (state.view === 'login') {
                 root.innerHTML = `
-                    <div class="h-screen bg-[#0046be] flex items-center justify-center p-6 font-sans">
+                    <div class="h-screen bg-[#0046be] flex items-center justify-center p-6 font-sans text-slate-800">
                         <div class="bg-white p-8 rounded-3xl w-full max-w-sm shadow-2xl text-center">
                             <img src="https://upload.wikimedia.org/wikipedia/commons/8/85/Procter_%26_Gamble_logo.svg" class="w-16 mx-auto mb-4" alt="P&G Logo">
-                            <h2 class="text-2xl font-black mb-2 text-slate-800 tracking-tight">KPI's Transformacionais</h2>
+                            <h2 class="text-2xl font-black mb-2 tracking-tight">KPI's Transformacionais</h2>
                             <p class="text-slate-400 text-sm mb-6 uppercase font-bold tracking-widest">Execução em Loja</p>
                             <input id="promoterInput" class="w-full border-2 p-4 rounded-xl mb-4 focus:border-blue-500 outline-none transition text-slate-700" placeholder="Nome do Promotor" value="${state.promoterName}">
-                            <button id="loginBtn" class="w-full bg-[#0046be] text-white font-bold py-4 rounded-xl hover:bg-blue-700 active:scale-95 transition shadow-lg">
-                                ACESSAR ROTEIRO
+                            <button id="loginBtn" class="w-full bg-[#0046be] text-white font-bold py-4 rounded-xl hover:bg-blue-700 active:scale-95 transition shadow-lg flex items-center justify-center gap-2">
+                                <i data-lucide="log-in" class="w-5 h-5"></i> ACESSAR ROTEIRO
                             </button>
                         </div>
                     </div>`;
@@ -79,23 +81,23 @@
                                 </div>
                                 <span class="font-black tracking-tighter">KPI TRACKER</span>
                             </div>
-                            <span class="text-[10px] bg-blue-800 px-2 py-1 rounded-md font-bold uppercase">${state.promoterName}</span>
+                            <div class="flex items-center gap-2">
+                                <span class="text-[10px] bg-blue-800 px-2 py-1 rounded-md font-bold uppercase">${state.promoterName}</span>
+                                <button onclick="logout()" class="p-1 hover:bg-blue-700 rounded transition"><i data-lucide="log-out" class="w-4 h-4"></i></button>
+                            </div>
                         </header>
                         <main class="p-4 max-w-lg mx-auto">
                             <div class="flex justify-between items-center mb-4 px-1">
                                 <h3 class="text-slate-500 font-bold text-xs uppercase tracking-wider">Lojas no Roteiro</h3>
-                                <button onclick="localStorage.clear(); location.reload();" class="text-[10px] text-slate-400 font-bold hover:text-red-500 uppercase">Sair</button>
                             </div>
                             <div id="storeList" class="space-y-3">
-                                <div class="flex flex-col items-center py-20 text-slate-400">
-                                    <div class="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mb-4"></div>
-                                    <p class="text-xs font-bold uppercase tracking-widest">Sincronizando...</p>
-                                </div>
+                                <!-- Lojas carregadas aqui -->
                             </div>
                         </main>
                     </div>`;
                 setupData();
             }
+            lucide.createIcons();
         }
 
         async function handleLogin() {
@@ -105,6 +107,7 @@
             localStorage.setItem('promoter_name', name);
             
             try {
+                // Tenta autenticar
                 if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
                     await signInWithCustomToken(auth, __initial_auth_token);
                 } else {
@@ -114,9 +117,17 @@
                 render();
             } catch (err) { 
                 console.error(err);
-                alert("Erro de conexão. Verifique se as credenciais do Firebase no index.html estão corretas."); 
+                const msg = (firebaseConfig.apiKey.includes("SUA_API_KEY")) 
+                    ? "ERRO: Você ainda não configurou as chaves do Firebase no código!" 
+                    : "Erro de conexão. Verifique o console do navegador.";
+                alert(msg); 
             }
         }
+
+        window.logout = function() {
+            localStorage.clear();
+            location.reload();
+        };
 
         function setupData() {
             onAuthStateChanged(auth, (user) => {
@@ -126,7 +137,7 @@
                     state.stores = snap.docs.map(d => ({ id: d.id, ...d.data() }));
                     updateStoresUI();
                 }, (err) => {
-                    console.warn("Usando modo offline/demonstração");
+                    console.warn("Modo demonstração ativado (Firestore indisponível)");
                     updateStoresUI(true);
                 });
             });
@@ -136,17 +147,18 @@
             const list = document.getElementById('storeList');
             if (!list) return;
             
+            // Dados fictícios se o Firebase não estiver pronto para carregar nada
             const data = (fallback || state.stores.length === 0) ? [
                 { id: 'demo1', name: 'Hipermercado Continente', completedKpis: 0, lastUpdate: 'Pendente' },
                 { id: 'demo2', name: 'Pingo Doce Central', completedKpis: 3, lastUpdate: 'Há 2h' }
             ] : state.stores;
 
             list.innerHTML = data.map(s => `
-                <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 flex justify-between items-center active:bg-slate-50 transition cursor-pointer">
+                <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 flex justify-between items-center active:scale-[0.98] transition cursor-pointer">
                     <div>
                         <h4 class="font-bold text-slate-800">${s.name}</h4>
                         <div class="flex items-center gap-2 mt-1">
-                            <span class="text-[9px] font-bold text-slate-400 uppercase tracking-tighter">Última Visita: ${s.lastUpdate || '---'}</span>
+                            <span class="text-[9px] font-bold text-slate-400 uppercase tracking-tighter">Visita: ${s.lastUpdate || 'Pendente'}</span>
                         </div>
                     </div>
                     <div class="flex items-center gap-3">
@@ -167,3 +179,4 @@
     <div id="root"></div>
 </body>
 </html>
+
