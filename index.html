@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#0046be" />
+    <title>P&G KPI Tracker</title>
+    <!-- Bibliotecas de Estilo e Ícones -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
+        import { getFirestore, collection, doc, onSnapshot, updateDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+
+        // CONFIGURAÇÃO DO FIREBASE
+        // Para o GitHub: Você deve substituir os valores abaixo pelos do seu Firebase Console
+        const firebaseConfig = typeof __firebase_config !== 'undefined' 
+            ? JSON.parse(__firebase_config) 
+            : {
+                apiKey: "SUA_API_KEY_AQUI", 
+                authDomain: "SEU-PROJETO.firebaseapp.com",
+                projectId: "SEU-PROJETO",
+                storageBucket: "SEU-PROJETO.appspot.com",
+                messagingSenderId: "000000000",
+                appId: "1:000000000:web:abcdef"
+            };
+
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'p-g-kpi-tracker';
+        
+        let app, auth, db;
+        try {
+            app = initializeApp(firebaseConfig);
+            auth = getAuth(app);
+            db = getFirestore(app);
+        } catch (e) { console.error(e); }
+
+        // Estado Global
+        let state = {
+            view: 'login',
+            promoterName: localStorage.getItem('promoter_name') || '',
+            stores: [],
+            user: null
+        };
+
+        // Renderização Principal
+        function render() {
+            const root = document.getElementById('root');
+            if (state.view === 'login') {
+                root.innerHTML = `
+                    <div class="h-screen bg-[#0046be] flex items-center justify-center p-6 font-sans">
+                        <div class="bg-white p-8 rounded-3xl w-full max-w-sm shadow-2xl text-center">
+                            <img src="https://upload.wikimedia.org/wikipedia/commons/8/85/Procter_%26_Gamble_logo.svg" class="w-16 mx-auto mb-4" alt="P&G Logo">
+                            <h2 class="text-2xl font-black mb-2 text-slate-800">KPI's Transformacionais</h2>
+                            <p class="text-slate-400 text-sm mb-6 uppercase font-bold tracking-widest">Execução em Loja</p>
+                            <input id="promoterInput" class="w-full border-2 p-4 rounded-xl mb-4 focus:border-blue-500 outline-none transition text-slate-700" placeholder="Nome do Promotor" value="${state.promoterName}">
+                            <button id="loginBtn" class="w-full bg-[#0046be] text-white font-bold py-4 rounded-xl hover:bg-blue-700 active:scale-95 transition shadow-lg">
+                                ACESSAR ROTEIRO
+                            </button>
+                        </div>
+                    </div>`;
+                document.getElementById('loginBtn').onclick = handleLogin;
+            } else {
+                root.innerHTML = `
+                    <div class="min-h-screen bg-slate-50 pb-20 font-sans text-slate-800">
+                        <header class="bg-[#0046be] text-white p-4 sticky top-0 flex justify-between items-center shadow-lg z-20">
+                            <div class="flex items-center gap-2">
+                                <div class="w-8 h-8 bg-white rounded-full flex items-center justify-center">
+                                    <img src="https://upload.wikimedia.org/wikipedia/commons/8/85/Procter_%26_Gamble_logo.svg" class="w-5" alt="P&G">
+                                </div>
+                                <span class="font-black tracking-tighter">KPI TRACKER</span>
+                            </div>
+                            <span class="text-[10px] bg-blue-800 px-2 py-1 rounded-md font-bold uppercase">${state.promoterName}</span>
+                        </header>
+                        <main class="p-4 max-w-lg mx-auto">
+                            <div id="storeList" class="space-y-3">
+                                <div class="flex flex-col items-center py-20 text-slate-400">
+                                    <div class="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mb-4"></div>
+                                    <p>Sincronizando lojas...</p>
+                                </div>
+                            </div>
+                        </main>
+                    </div>`;
+                setupData();
+            }
+        }
+
+        async function handleLogin() {
+            const name = document.getElementById('promoterInput').value;
+            if (!name.trim()) return;
+            state.promoterName = name;
+            localStorage.setItem('promoter_name', name);
+            
+            try {
+                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                    await signInWithCustomToken(auth, __initial_auth_token);
+                } else {
+                    await signInAnonymously(auth);
+                }
+                state.view = 'stores';
+                render();
+            } catch (err) { alert("Erro de conexão. Verifique sua chave API."); }
+        }
+
+        function setupData() {
+            onAuthStateChanged(auth, (user) => {
+                if (!user) return;
+                const storesRef = collection(db, 'artifacts', appId, 'public', 'data', 'stores');
+                onSnapshot(storesRef, (snap) => {
+                    state.stores = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+                    updateStoresUI();
+                }, (err) => updateStoresUI(true));
+            });
+        }
+
+        function updateStoresUI(fallback = false) {
+            const list = document.getElementById('storeList');
+            if (!list) return;
+            
+            const data = fallback || state.stores.length === 0 ? [
+                { name: 'Loja Exemplo (P&G)', completedKpis: 0, lastUpdate: 'Pendente' }
+            ] : state.stores;
+
+            list.innerHTML = data.map(s => `
+                <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 flex justify-between items-center active:bg-slate-50 transition cursor-pointer">
+                    <div>
+                        <h4 class="font-bold text-slate-800">${s.name}</h4>
+                        <div class="flex items-center gap-2 mt-1">
+                            <span class="text-[9px] font-bold text-slate-400 uppercase tracking-tighter">Última: ${s.lastUpdate || '---'}</span>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-3">
+                        <div class="bg-blue-50 text-[#0046be] font-black text-xs px-3 py-1.5 rounded-full">
+                            ${s.completedKpis || 0}/6
+                        </div>
+                        <i data-lucide="chevron-right" class="w-4 h-4 text-slate-300"></i>
+                    </div>
+                </div>
+            `).join('');
+            lucide.createIcons();
+        }
+
+        window.onload = render;
+    </script>
+</head>
+<body class="m-0 p-0 overflow-x-hidden">
+    <div id="root"></div>
+</body>
+</html>
