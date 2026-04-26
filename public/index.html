@@ -1,31 +1,175 @@
 <!DOCTYPE html>
 <html lang="pt">
-  <head>
+<head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="theme-color" content="#0046be" />
-    <meta name="description" content="P&G KPI Tracker - Monitorização de Execução" />
     <title>P&G KPI Tracker</title>
-    <!-- Tailwind CSS para o design moderno -->
+    <!-- Bibliotecas Necessárias -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <style>
-      body {
-        background-color: #f8fafc;
-        margin: 0;
-        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
-          'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
-          sans-serif;
-        -webkit-font-smoothing: antialiased;
-        -moz-osx-font-smoothing: grayscale;
-      }
-      #root {
-        min-height: 100vh;
-      }
-    </style>
-  </head>
-  <body>
-    <noscript>É necessário ativar o JavaScript para utilizar esta aplicação.</noscript>
-    <!-- O React irá injetar a aplicação dentro desta div -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
+        import { getFirestore, collection, doc, onSnapshot, updateDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+
+        // CONFIGURAÇÃO DINÂMICA DO FIREBASE
+        // Se estiver no ambiente Canvas, usa as variáveis do sistema.
+        // Se estiver no GitHub, preencha o objeto abaixo com os dados do seu Firebase Console.
+        const firebaseConfig = typeof __firebase_config !== 'undefined' 
+            ? JSON.parse(__firebase_config) 
+            : {
+                apiKey: "COLE_AQUI_SUA_API_KEY", 
+                authDomain: "SEU-PROJETO.firebaseapp.com",
+                projectId: "SEU-PROJETO",
+                storageBucket: "SEU-PROJETO.appspot.com",
+                messagingSenderId: "123456789",
+                appId: "1:123456789:web:abcdef"
+            };
+
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'p-g-kpi-tracker';
+
+        // Inicialização Protegida
+        let app, auth, db;
+        try {
+            app = initializeApp(firebaseConfig);
+            auth = getAuth(app);
+            db = getFirestore(app);
+        } catch (e) {
+            console.error("Erro na inicialização do Firebase:", e);
+        }
+
+        // Estado da Aplicação
+        let state = {
+            view: 'login',
+            promoterName: localStorage.getItem('promoter_name') || '',
+            stores: [],
+            selectedStore: null,
+            loading: false,
+            kpis: [
+                { id: 1, title: "1. SOS Downny", status: false, motivo: "" },
+                { id: 2, title: "2. Pantene - Gôndola e Óleo", status: false, motivo: "" },
+                { id: 3, title: "3. Cko Venus Sensível", status: false, motivo: "" },
+                { id: 4, title: "4. Secret (Bandejas/Alimentar)", status: false, motivo: "" },
+                { id: 5, title: "5. 60% Branqueamento", status: false, motivo: "" },
+                { id: 6, title: "6. Pampers - Materiais", status: false, motivo: "" }
+            ]
+        };
+
+        // Renderização da UI
+        function render() {
+            const root = document.getElementById('root');
+            if (state.view === 'login') {
+                root.innerHTML = `
+                    <div class="h-screen bg-[#0046be] flex items-center justify-center p-6">
+                        <div class="bg-white p-8 rounded-3xl w-full max-w-sm shadow-2xl text-center">
+                            <img src="https://upload.wikimedia.org/wikipedia/commons/8/85/Procter_%26_Gamble_logo.svg" class="w-16 mx-auto mb-4" alt="P&G Logo">
+                            <h2 class="text-2xl font-black mb-2 text-slate-800">KPI's Transformacionais</h2>
+                            <p class="text-slate-400 text-sm mb-6 uppercase font-bold tracking-tighter">Execução P&G</p>
+                            <input id="promoterInput" class="w-full border-2 p-4 rounded-xl mb-4 focus:border-blue-500 outline-none transition" placeholder="Nome do Promotor" value="${state.promoterName}">
+                            <button id="loginBtn" class="w-full bg-[#0046be] text-white font-bold py-4 rounded-xl hover:bg-blue-700 active:scale-95 transition">
+                                ENTRAR
+                            </button>
+                            <div id="authError" class="hidden mt-4 text-red-500 text-xs font-bold">Erro de autenticação. Verifique a API Key.</div>
+                        </div>
+                    </div>`;
+                document.getElementById('loginBtn').onclick = handleLogin;
+            } else if (state.view === 'stores') {
+                root.innerHTML = `
+                    <div class="min-h-screen bg-gray-50 pb-20">
+                        <header class="bg-[#0046be] text-white p-4 sticky top-0 flex justify-between items-center shadow-md z-10">
+                            <span class="font-black">P&G KPI TRACKER</span>
+                            <span class="text-[10px] uppercase font-bold px-2 py-1 bg-blue-800 rounded-lg">${state.promoterName}</span>
+                        </header>
+                        <main class="p-4 max-w-lg mx-auto">
+                            <div class="flex justify-between items-center mb-4">
+                                <h3 class="text-slate-500 font-bold text-xs uppercase tracking-wider">Lojas no Roteiro</h3>
+                                <button onclick="localStorage.clear(); location.reload();" class="text-xs text-slate-400 hover:text-red-500">Sair</button>
+                            </div>
+                            <div id="storeList" class="space-y-3">
+                                <div class="p-8 text-center text-slate-400 flex flex-col items-center gap-2">
+                                    <div class="w-6 h-6 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+                                    Acedendo ao banco de dados...
+                                </div>
+                            </div>
+                        </main>
+                    </div>`;
+                setupDataListener();
+            }
+        }
+
+        async function handleLogin() {
+            const name = document.getElementById('promoterInput').value;
+            if (!name.trim()) return;
+
+            state.promoterName = name;
+            localStorage.setItem('promoter_name', name);
+            
+            try {
+                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                    await signInWithCustomToken(auth, __initial_auth_token);
+                } else {
+                    await signInAnonymously(auth);
+                }
+                state.view = 'stores';
+                render();
+            } catch (err) {
+                console.error(err);
+                document.getElementById('authError').classList.remove('hidden');
+            }
+        }
+
+        function setupDataListener() {
+            if (!auth.currentUser) return;
+            
+            const storesRef = collection(db, 'artifacts', appId, 'public', 'data', 'stores');
+            onSnapshot(storesRef, (snap) => {
+                state.stores = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+                updateStoreListUI();
+            }, (err) => {
+                console.error("Erro Firestore:", err);
+                // Fallback para visualização se não houver dados
+                updateStoreListUI(true);
+            });
+        }
+
+        function updateStoreListUI(isFallback = false) {
+            const list = document.getElementById('storeList');
+            if (!list) return;
+
+            const displayStores = isFallback ? [
+                {id: '1', name: 'Hipermercado Continente', completedKpis: 0, lastUpdate: 'Pendente'},
+                {id: '2', name: 'Pingo Doce Central', completedKpis: 3, lastUpdate: 'Hoje'}
+            ] : state.stores;
+
+            if (displayStores.length === 0) {
+                list.innerHTML = `<div class="p-8 text-center text-slate-400">Nenhuma loja encontrada no roteiro.</div>`;
+                return;
+            }
+
+            list.innerHTML = displayStores.map(s => `
+                <div class="bg-white p-5 rounded-2xl shadow-sm flex justify-between items-center border border-slate-200 active:scale-95 transition cursor-pointer">
+                    <div class="flex-1">
+                        <p class="font-bold text-slate-800">${s.name}</p>
+                        <p class="text-[10px] text-slate-400 mt-1 uppercase">Sincronizado: ${s.lastUpdate || 'Não'}</p>
+                    </div>
+                    <div class="flex items-center gap-3">
+                        <div class="text-right">
+                            <span class="block text-xs font-black ${s.completedKpis === 6 ? 'text-green-500' : 'text-[#0046be]'}">
+                                ${s.completedKpis || 0}/6
+                            </span>
+                        </div>
+                        <i data-lucide="chevron-right" class="text-slate-300 w-5 h-5"></i>
+                    </div>
+                </div>
+            `).join('');
+            lucide.createIcons();
+        }
+
+        window.onload = render;
+    </script>
+</head>
+<body>
     <div id="root"></div>
-  </body>
+</body>
 </html>
