@@ -15,7 +15,7 @@
         import { getFirestore, collection, doc, onSnapshot, updateDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
         // CONFIGURAÇÃO DO FIREBASE
-        // Para o GitHub: Você deve substituir os valores abaixo pelos do seu Firebase Console
+        // No GitHub: Substitua os valores abaixo pelos dados do seu Console Firebase
         const firebaseConfig = typeof __firebase_config !== 'undefined' 
             ? JSON.parse(__firebase_config) 
             : {
@@ -34,14 +34,22 @@
             app = initializeApp(firebaseConfig);
             auth = getAuth(app);
             db = getFirestore(app);
-        } catch (e) { console.error(e); }
+        } catch (e) { console.error("Erro Firebase:", e); }
 
         // Estado Global
         let state = {
             view: 'login',
             promoterName: localStorage.getItem('promoter_name') || '',
             stores: [],
-            user: null
+            selectedStore: null,
+            kpis: [
+                { id: 1, title: "1. SOS Downny", status: false },
+                { id: 2, title: "2. Pantene - Gôndola e Óleo", status: false },
+                { id: 3, title: "3. Cko Venus Sensível", status: false },
+                { id: 4, title: "4. Secret (Bandejas/Alimentar)", status: false },
+                { id: 5, title: "5. 60% Branqueamento", status: false },
+                { id: 6, title: "6. Pampers - Materiais", status: false }
+            ]
         };
 
         // Renderização Principal
@@ -52,7 +60,7 @@
                     <div class="h-screen bg-[#0046be] flex items-center justify-center p-6 font-sans">
                         <div class="bg-white p-8 rounded-3xl w-full max-w-sm shadow-2xl text-center">
                             <img src="https://upload.wikimedia.org/wikipedia/commons/8/85/Procter_%26_Gamble_logo.svg" class="w-16 mx-auto mb-4" alt="P&G Logo">
-                            <h2 class="text-2xl font-black mb-2 text-slate-800">KPI's Transformacionais</h2>
+                            <h2 class="text-2xl font-black mb-2 text-slate-800 tracking-tight">KPI's Transformacionais</h2>
                             <p class="text-slate-400 text-sm mb-6 uppercase font-bold tracking-widest">Execução em Loja</p>
                             <input id="promoterInput" class="w-full border-2 p-4 rounded-xl mb-4 focus:border-blue-500 outline-none transition text-slate-700" placeholder="Nome do Promotor" value="${state.promoterName}">
                             <button id="loginBtn" class="w-full bg-[#0046be] text-white font-bold py-4 rounded-xl hover:bg-blue-700 active:scale-95 transition shadow-lg">
@@ -61,7 +69,7 @@
                         </div>
                     </div>`;
                 document.getElementById('loginBtn').onclick = handleLogin;
-            } else {
+            } else if (state.view === 'stores') {
                 root.innerHTML = `
                     <div class="min-h-screen bg-slate-50 pb-20 font-sans text-slate-800">
                         <header class="bg-[#0046be] text-white p-4 sticky top-0 flex justify-between items-center shadow-lg z-20">
@@ -74,10 +82,14 @@
                             <span class="text-[10px] bg-blue-800 px-2 py-1 rounded-md font-bold uppercase">${state.promoterName}</span>
                         </header>
                         <main class="p-4 max-w-lg mx-auto">
+                            <div class="flex justify-between items-center mb-4 px-1">
+                                <h3 class="text-slate-500 font-bold text-xs uppercase tracking-wider">Lojas no Roteiro</h3>
+                                <button onclick="localStorage.clear(); location.reload();" class="text-[10px] text-slate-400 font-bold hover:text-red-500 uppercase">Sair</button>
+                            </div>
                             <div id="storeList" class="space-y-3">
                                 <div class="flex flex-col items-center py-20 text-slate-400">
                                     <div class="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mb-4"></div>
-                                    <p>Sincronizando lojas...</p>
+                                    <p class="text-xs font-bold uppercase tracking-widest">Sincronizando...</p>
                                 </div>
                             </div>
                         </main>
@@ -100,7 +112,10 @@
                 }
                 state.view = 'stores';
                 render();
-            } catch (err) { alert("Erro de conexão. Verifique sua chave API."); }
+            } catch (err) { 
+                console.error(err);
+                alert("Erro de conexão. Verifique se as credenciais do Firebase no index.html estão corretas."); 
+            }
         }
 
         function setupData() {
@@ -110,7 +125,10 @@
                 onSnapshot(storesRef, (snap) => {
                     state.stores = snap.docs.map(d => ({ id: d.id, ...d.data() }));
                     updateStoresUI();
-                }, (err) => updateStoresUI(true));
+                }, (err) => {
+                    console.warn("Usando modo offline/demonstração");
+                    updateStoresUI(true);
+                });
             });
         }
 
@@ -118,8 +136,9 @@
             const list = document.getElementById('storeList');
             if (!list) return;
             
-            const data = fallback || state.stores.length === 0 ? [
-                { name: 'Loja Exemplo (P&G)', completedKpis: 0, lastUpdate: 'Pendente' }
+            const data = (fallback || state.stores.length === 0) ? [
+                { id: 'demo1', name: 'Hipermercado Continente', completedKpis: 0, lastUpdate: 'Pendente' },
+                { id: 'demo2', name: 'Pingo Doce Central', completedKpis: 3, lastUpdate: 'Há 2h' }
             ] : state.stores;
 
             list.innerHTML = data.map(s => `
@@ -127,11 +146,11 @@
                     <div>
                         <h4 class="font-bold text-slate-800">${s.name}</h4>
                         <div class="flex items-center gap-2 mt-1">
-                            <span class="text-[9px] font-bold text-slate-400 uppercase tracking-tighter">Última: ${s.lastUpdate || '---'}</span>
+                            <span class="text-[9px] font-bold text-slate-400 uppercase tracking-tighter">Última Visita: ${s.lastUpdate || '---'}</span>
                         </div>
                     </div>
                     <div class="flex items-center gap-3">
-                        <div class="bg-blue-50 text-[#0046be] font-black text-xs px-3 py-1.5 rounded-full">
+                        <div class="bg-blue-50 text-[#0046be] font-black text-xs px-3 py-1.5 rounded-full border border-blue-100">
                             ${s.completedKpis || 0}/6
                         </div>
                         <i data-lucide="chevron-right" class="w-4 h-4 text-slate-300"></i>
@@ -144,7 +163,7 @@
         window.onload = render;
     </script>
 </head>
-<body class="m-0 p-0 overflow-x-hidden">
+<body class="m-0 p-0 overflow-x-hidden bg-slate-50">
     <div id="root"></div>
 </body>
 </html>
